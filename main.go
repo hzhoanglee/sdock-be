@@ -3,6 +3,7 @@ package main
 import (
 	"app/database"
 	"app/router"
+	"app/scheduler"
 	"github.com/gofiber/fiber/v2"
 	"log"
 	// "github.com/gofiber/fiber/v2/middleware/cors"
@@ -23,6 +24,9 @@ func main() {
 		AppName:       "App Name",
 	})
 	app.Use(recover.New())
+	go scheduler.StartAutomationScheduler()
+
+	// allow cors
 	// app.Use(cors.New())
 
 	database.ConnectDB()

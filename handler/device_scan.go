@@ -32,7 +32,7 @@ func ScanForDevices() []ScanDevice {
 		wg.Add(1)
 		go func(ip string) {
 			defer wg.Done()
-			conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:80", ip), 700*time.Millisecond)
+			conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:80", ip), 5000*time.Millisecond)
 			if err == nil {
 				conn.Close()
 				results <- ip
@@ -46,6 +46,7 @@ func ScanForDevices() []ScanDevice {
 	}()
 
 	for server := range results {
+		fmt.Println("Found device at", server)
 		resp, err := http.Get(fmt.Sprintf("http://%s/available", server))
 		if err == nil && resp.StatusCode == 200 {
 			body, err := io.ReadAll(resp.Body)

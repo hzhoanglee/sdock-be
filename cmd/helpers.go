@@ -5,6 +5,7 @@ import (
 	"app/model"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
+	"net"
 	"time"
 )
 
@@ -46,4 +47,21 @@ func SeedDeviceType() {
 
 func GetCurrentTime() string {
 	return time.Now().Format(time.DateTime)
+}
+
+func GetLocalIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String()
+			}
+		}
+	}
+
+	return ""
 }

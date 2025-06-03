@@ -4,7 +4,10 @@ import (
 	"app/cmd"
 	"app/database"
 	"app/model"
+	"bytes"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/utils"
 	"io"
@@ -14,6 +17,7 @@ import (
 )
 
 // GetAllRoomDevice get all devices
+// User Action
 func GetAllRoomDevice(c *fiber.Ctx) error {
 	uid := cmd.GetUserIDFromToken(c)
 	roomID := c.Params("room_id")
@@ -75,8 +79,16 @@ func RegisterDevice(c *fiber.Ctx) error {
 		return c.Status(404).JSON(fiber.Map{"status": "error", "message": "No Device Type found with ID", "data": nil})
 	}
 	device.DeviceTypeID = int(deviceType.ID)
-
+	fmt.Println(device.IP)
+	sendServerConfig(device.IP, device.SecretID)
 	db.Create(&device)
+	// Create device status
+	deviceStatus := model.DeviceStatus{
+		DeviceID: int(device.ID),
+		Status:   0,
+	}
+
+	db.Create(&deviceStatus)
 	if device.ID == 0 {
 		return c.Status(500).JSON(fiber.Map{"status": "error", "message": "Failed to create device", "data": nil})
 	}
@@ -163,6 +175,7 @@ func SetStatusDevice(c *fiber.Ctx) error {
 	if Device.OwnerID != uid && !cmd.CheckRoomPermission(uid, Device.Room) {
 		return c.Status(403).JSON(fiber.Map{"status": "error", "message": "You are not the owner of this device", "data": nil})
 	}
+	//return c.JSON(fiber.Map{"status": "success", "message": "Device status updated", "data": nil})
 	if Device.DeviceType.Kind == "SWITCH" {
 		if DeviceStatus.Status == 1 {
 			DeviceStatus.Value = "on"
@@ -174,8 +187,9 @@ func SetStatusDevice(c *fiber.Ctx) error {
 			return err
 		}
 	}
-	if setDeviceStatus(DeviceStatus.DeviceID, DeviceStatus.Status, DeviceStatus.Value, c) != nil {
-		return c.Status(500).JSON(fiber.Map{"status": "error", "message": "Failed to update device status", "data": nil})
+	d := setDeviceStatus(DeviceStatus.DeviceID, DeviceStatus.Status, DeviceStatus.Value, c)
+	if d != nil {
+		return c.Status(500).JSON(fiber.Map{"status": "error", "message": "Failed to update device status", "data": d.Error()})
 	}
 
 	return c.JSON(fiber.Map{"status": "success", "message": "Device status updated", "data": nil})
@@ -198,6 +212,28 @@ func GetTypeDevice(c *fiber.Ctx) error {
 }
 
 // Updating Functions
+func getDeviceStatus(deviceId int) (model.DeviceStatus, error) {
+	db := database.DB
+	var deviceStatus = model.DeviceStatus{}
+	db.Preload("Device").Preload("Device.Room").Preload("Device.DeviceType").Where("device_id = ?", deviceId).First(&deviceStatus)
+	return deviceStatus, nil
+}
+
+func storeDeviceLog(deviceId, uid int, value string) error {
+	db := database.DB
+	deviceLog := model.DeviceLog{
+		DeviceID: uint(deviceId),
+		OwnerID:  uint(uid),
+		Value:    value,
+	}
+	err := db.Create(&deviceLog).Error
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// User and Device actions
 func setDeviceStatus(deviceId, status int, value string, c *fiber.Ctx) error {
 	uid := cmd.GetUserIDFromToken(c)
 	db := database.DB
@@ -221,27 +257,6 @@ func setDeviceStatus(deviceId, status int, value string, c *fiber.Ctx) error {
 	}
 	_ = storeDeviceLog(deviceId, int(uid), value)
 
-	return nil
-}
-
-func getDeviceStatus(deviceId int) (model.DeviceStatus, error) {
-	db := database.DB
-	var deviceStatus = model.DeviceStatus{}
-	db.Preload("Device").Preload("Device.Room").Preload("Device.DeviceType").Where("device_id = ?", deviceId).First(&deviceStatus)
-	return deviceStatus, nil
-}
-
-func storeDeviceLog(deviceId, uid int, value string) error {
-	db := database.DB
-	deviceLog := model.DeviceLog{
-		DeviceID: uint(deviceId),
-		OwnerID:  uint(uid),
-		Value:    value,
-	}
-	err := db.Create(&deviceLog).Error
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -299,4 +314,31 @@ func setIOTStatusToDevice(deviceId, status int, value string) error {
 func DoScanDevice(c *fiber.Ctx) error {
 	devices := ScanForDevices()
 	return c.JSON(fiber.Map{"status": "success", "message": "Devices found", "data": devices})
+}
+
+func sendServerConfig(remoteDeviceIP, secretID string) string {
+	// CCU Server = http://<localIP>:3000/api/v1/local_ip
+	// perform run to get local IP
+	thisDeviceIP := cmd.GetLocalIP()
+	fmt.Println("Local IP: ", thisDeviceIP)
+	ccuEndpoint := "http://" + thisDeviceIP + ":3000/api/v1/local_ip"
+	fmt.Println(secretID)
+	// Create data for the POST request
+	data := map[string]string{"server": ccuEndpoint, "secret": secretID}
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return "Error in JSON marshalling"
+	}
+	// Create a new request
+	req, err := http.NewRequest("POST", "http://"+remoteDeviceIP+":80/server-config", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "Error in creating request"
+	}
+	// Send the request
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "Error in sending request"
+	}
+	defer resp.Body.Close()
+	return "Request sent successfully"
 }

@@ -10,4 +10,5 @@ type User struct {
 	Password string `gorm:"not null;" validate:"required,min=6,max=50" json:"-"`
 	Names    string `json:"names"`
 	Avatar   string `json:"avatar"`
+	Age      int    `json:"age"`
 }

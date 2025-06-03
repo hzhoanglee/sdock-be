@@ -72,3 +72,19 @@ func DeleteHome(c *fiber.Ctx) error {
 	db.Delete(&Home)
 	return c.JSON(fiber.Map{"status": "success", "message": "Home successfully deleted", "data": nil})
 }
+
+//func HomeTransfer(c *fiber.Ctx) error {
+//	id := c.Params("id")
+//	db := database.DB
+//
+//	var Home model.Home
+//	db.First(&Home, id)
+//	if Home.Title == "" {
+//		return c.Status(404).JSON(fiber.Map{"status": "error", "message": "No Home found with ID", "data": nil})
+//
+//	}
+//	chec
+//	Home.OwnerID = uint(c.Locals("user").(*jwt.Token).Claims.(jwt.MapClaims)["user_id"].(float64))
+//	db.Save(&Home)
+//	return c.JSON(fiber.Map{"status": "success", "message": "Home successfully transfered", "data": Home})
+//}

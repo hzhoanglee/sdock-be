@@ -163,3 +163,40 @@ func DeleteUser(c *fiber.Ctx) error {
 	db.Delete(&user)
 	return c.JSON(fiber.Map{"status": "success", "message": "User successfully deleted", "data": nil})
 }
+
+// ChangePassword change password
+func ChangePassword(c *fiber.Ctx) error {
+	type PasswordInput struct {
+		Password    string `json:"password"`
+		NewPassword string `json:"new_password"`
+	}
+	var pi PasswordInput
+	if err := c.BodyParser(&pi); err != nil {
+		return c.Status(500).JSON(fiber.Map{"status": "error", "message": "Review your input", "errors": err.Error()})
+	}
+	id := c.Params("id")
+	token := c.Locals("user").(*jwt.Token)
+
+	if !validToken(token, id) {
+		return c.Status(500).JSON(fiber.Map{"status": "error", "message": "Invalid token id", "data": nil})
+	}
+
+	if !validUser(id, pi.Password) {
+		return c.Status(500).JSON(fiber.Map{"status": "error", "message": "Not valid user", "data": nil})
+	}
+
+	db := database.DB
+	var user model.User
+
+	db.First(&user, id)
+
+	hash, err := hashPassword(pi.NewPassword)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"status": "error", "message": "Couldn't hash password", "errors": err.Error()})
+	}
+
+	user.Password = hash
+	db.Save(&user)
+
+	return c.JSON(fiber.Map{"status": "success", "message": "Password successfully changed", "data": nil})
+}
